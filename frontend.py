@@ -6,7 +6,8 @@ from getpass import getpass
 parser = argparse.ArgumentParser()
 parser.add_argument("--fetch", nargs=2, help="Fetch a package")
 parser.add_argument("--publish", nargs=4, help="Publish a package")
-parser.add_argument("--register", action="store_const",const=True, help="Register a new user")
+parser.add_argument("--register", action="store_const", const=True, help="Register a new user")
+parser.add_argument("--dependencies", nargs=2, help="Get package dependencies")
 
 args = parser.parse_args()
 auth_token = None
@@ -43,7 +44,7 @@ def publish():
 
     package_data = {
         'name': name,
-        'AuthorName': username,
+        'author': username,
         'version': version,
         'description': description
     }
@@ -76,27 +77,45 @@ def download_file(url, destination):
 
 def fetch_latest_version(name):
     try:
-        response = requests.get(f"http://localhost:5000/packages/{name}/versions")
+        response = requests.get(f"http://localhost:5000/packages/{name}.json")
         response.raise_for_status()
-        versions = response.json()
-        if versions:
-            latest_version = max(versions)
-            return latest_version
+        return response.json()['version']
     except requests.RequestException as e:
         print(f"\033[31mError fetching latest version for {name}: {e}\033[0m")
     return None
 
-if(args.publish):
+def get_dependencies(name, version):
+    try:
+        response = requests.get(f"http://localhost:5000/packages/{name}-{version}/dependencies")
+        response.raise_for_status()
+        dependencies = response.json()
+        if dependencies:
+            print(f"Dependencies for {name} version {version}:")
+            for dependency in dependencies:
+                print(f"  - {dependency}")
+        else:
+            print(f"No dependencies for {name} version {version}.")
+    except requests.RequestException as e:
+        print(f"\033[31mError fetching dependencies for {name} version {version}: {e}\033[0m")
+
+if args.publish:
     publish()
 
-if(args.register):
+if args.register:
     username = input("Username: ")
     password = getpass("Password: ")
-    register(username,password)
+    register(username, password)
 
-if (args.fetch):
+if args.fetch:
     name = args.fetch[0]
     output = args.fetch[1]
     if "-" not in name:
         version = fetch_latest_version(name)
-    download_file(f"http://localhost:5000/packages/{name}/{version}", output)
+    else:
+        name, version = name.split('-')
+    download_file(f"http://localhost:5000/packages/{name}-{version}.tar.xz", output)
+
+if args.dependencies:
+    name = args.dependencies[0]
+    version = args.dependencies[1]
+    get_dependencies(name, version)
